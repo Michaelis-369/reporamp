@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import './App.css'
+const BASE = import.meta.env.VITE_API_URL || ''
 
 // ─── Landing ──────────────────────────────────────────────────────────────────
 function LandingPage({ onAnalyze }) {
@@ -33,7 +34,7 @@ function LandingPage({ onAnalyze }) {
     setLoading(true)
     setError('')
     try {
-      const resp = await fetch('${import.meta.env.VITE_API_URL}/api/analyze', {
+      const resp = await fetch(`${BASE}/api/analyze`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ repo_url: url.trim() }),
@@ -236,7 +237,7 @@ function ChatTab({ repoCtx, owner, repo }) {
     setMsgs(m => [...m, { role: 'user', text: q }])
     setLoading(true)
     try {
-      const resp = await fetch('${import.meta.env.VITE_API_URL}/api/chat', {
+      const resp = await fetch(`${BASE}/api/chat`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ question: q, repo_context: repoCtx }),
