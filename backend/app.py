@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["https://your-vercel-app.vercel.app", "http://localhost:5173"])
 
 GITHUB_TOKEN      = os.getenv("GITHUB_TOKEN", "")
 WATSONX_API_KEY   = os.getenv("WATSONX_API_KEY")
