@@ -1,0 +1,7 @@
+# reporamp/.gitignore
+.env
+venv/
+node_modules/
+__pycache__/
+dist/
+*.pyc
