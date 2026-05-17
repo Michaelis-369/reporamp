@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import './App.css'
-const BASE = import.meta.env.VITE_API_URL || ''
+
+const BASE = import.meta.env.VITE_API_URL || 'https://reporamp-production.up.railway.app'
 
 // ─── Landing ──────────────────────────────────────────────────────────────────
 function LandingPage({ onAnalyze }) {
