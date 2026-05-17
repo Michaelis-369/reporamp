@@ -11,7 +11,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app,
+     origins="*",
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "OPTIONS"],
+     supports_credentials=False)
 
 GITHUB_TOKEN       = os.getenv("GITHUB_TOKEN", "")
 WATSONX_API_KEY    = os.getenv("WATSONX_API_KEY")
@@ -21,18 +25,25 @@ MODEL_ID           = "ibm/granite-3-8b-instruct"
 
 # ── CORS headers on every response ────────────────────────────────────────────
 @app.after_request
-def after_request(response):
+def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"]  = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
-    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Max-Age"]       = "86400"
     return response
 
-# ── Preflight handler ─────────────────────────────────────────────────────────
 @app.route("/api/analyze", methods=["OPTIONS"])
-@app.route("/api/chat",    methods=["OPTIONS"])
-def options_handler():
-    return jsonify({}), 200
+def options_analyze():
+    return "", 204
 
+@app.route("/api/chat", methods=["OPTIONS"])
+def options_chat():
+    return "", 204
+
+@app.route("/health", methods=["GET", "OPTIONS"])
+def health():
+    return jsonify({"status": "ok"})
+    
 # ── IAM token cache ───────────────────────────────────────────────────────────
 _iam_cache = {"token": None, "expires": 0}
 
