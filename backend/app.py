@@ -11,13 +11,27 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, origins=["https://your-vercel-app.vercel.app", "http://localhost:5173"])
+CORS(app, resources={r"/*": {"origins": "*"}})
 
-GITHUB_TOKEN      = os.getenv("GITHUB_TOKEN", "")
-WATSONX_API_KEY   = os.getenv("WATSONX_API_KEY")
+GITHUB_TOKEN       = os.getenv("GITHUB_TOKEN", "")
+WATSONX_API_KEY    = os.getenv("WATSONX_API_KEY")
 WATSONX_PROJECT_ID = os.getenv("WATSONX_PROJECT_ID")
-WATSONX_URL       = os.getenv("WATSONX_URL", "https://us-south.ml.cloud.ibm.com")
-MODEL_ID          = "ibm/granite-3-8b-instruct"
+WATSONX_URL        = os.getenv("WATSONX_URL", "https://us-south.ml.cloud.ibm.com")
+MODEL_ID           = "ibm/granite-3-8b-instruct"
+
+# ── CORS headers on every response ────────────────────────────────────────────
+@app.after_request
+def after_request(response):
+    response.headers["Access-Control-Allow-Origin"]  = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    return response
+
+# ── Preflight handler ─────────────────────────────────────────────────────────
+@app.route("/api/analyze", methods=["OPTIONS"])
+@app.route("/api/chat",    methods=["OPTIONS"])
+def options_handler():
+    return jsonify({}), 200
 
 # ── IAM token cache ───────────────────────────────────────────────────────────
 _iam_cache = {"token": None, "expires": 0}
@@ -36,7 +50,6 @@ def get_iam_token():
     _iam_cache["token"]   = data["access_token"]
     _iam_cache["expires"] = time.time() + data.get("expires_in", 3600)
     return _iam_cache["token"]
-
 
 # ── watsonx.ai call ───────────────────────────────────────────────────────────
 def call_watsonx(prompt: str, max_tokens: int = 1200) -> str:
@@ -59,8 +72,7 @@ def call_watsonx(prompt: str, max_tokens: int = 1200) -> str:
     resp.raise_for_status()
     return resp.json()["results"][0]["generated_text"].strip()
 
-
-# ── JSON extraction (robust against markdown fences / truncation) ─────────────
+# ── JSON extraction ───────────────────────────────────────────────────────────
 def extract_json(text: str) -> dict:
     text = text.strip()
     for fence in ("```json", "```JSON", "```"):
@@ -86,13 +98,11 @@ def extract_json(text: str) -> dict:
                 break
 
     if end == -1:
-        # Model truncated — try closing open braces
         open_braces = text[start:].count("{") - text[start:].count("}")
         text = text[start:] + "}" * open_braces
-        end = len(text)
+        end  = len(text)
 
     return json.loads(text[start:end])
-
 
 # ── GitHub helpers ────────────────────────────────────────────────────────────
 def gh_headers():
@@ -101,13 +111,11 @@ def gh_headers():
         h["Authorization"] = f"token {GITHUB_TOKEN}"
     return h
 
-
 def parse_github_url(url: str):
     m = re.search(r"github\.com[/:]([^/\s]+)/([^/\s#?]+)", url.replace(".git", ""))
     if not m:
         raise ValueError("Could not parse GitHub URL")
     return m.group(1), m.group(2)
-
 
 def fetch_tree(owner: str, repo: str) -> list:
     resp = requests.get(
@@ -117,8 +125,7 @@ def fetch_tree(owner: str, repo: str) -> list:
     resp.raise_for_status()
     return resp.json().get("tree", [])
 
-
-def fetch_file(owner: str, repo: str, path: str) -> str | None:
+def fetch_file(owner: str, repo: str, path: str):
     resp = requests.get(
         f"https://api.github.com/repos/{owner}/{repo}/contents/{path}",
         headers=gh_headers(), timeout=10,
@@ -133,41 +140,25 @@ def fetch_file(owner: str, repo: str, path: str) -> str | None:
             return None
     return None
 
-
-PRIORITY = [
-    "README.md", "README.txt", "readme.md",
-    "package.json", "requirements.txt", "pyproject.toml",
-    "setup.py", "go.mod", "Cargo.toml", "pom.xml",
-    "Dockerfile", "docker-compose.yml",
-    "main.py", "app.py", "server.py",
-    "index.js", "index.ts", "main.js", "main.ts", "server.js", "server.ts",
+PRIORITY  = [
+    "README.md","README.txt","readme.md","package.json","requirements.txt",
+    "pyproject.toml","setup.py","go.mod","Cargo.toml","pom.xml",
+    "Dockerfile","docker-compose.yml","main.py","app.py","server.py",
+    "index.js","index.ts","main.js","main.ts","server.js","server.ts",
 ]
+CODE_EXT  = {".py",".js",".ts",".jsx",".tsx",".go",".java",".rs",".rb",
+             ".php",".cs",".cpp",".c",".h",".swift"}
+SKIP_DIRS = {"node_modules",".git","dist","build","__pycache__","vendor",".next","coverage"}
 
-CODE_EXT = {
-    ".py", ".js", ".ts", ".jsx", ".tsx",
-    ".go", ".java", ".rs", ".rb", ".php",
-    ".cs", ".cpp", ".c", ".h", ".swift",
-}
-
-SKIP_DIRS = {
-    "node_modules", ".git", "dist", "build",
-    "__pycache__", "vendor", ".next", "coverage",
-}
-
-
-def pick_files(tree: list) -> list[str]:
-    blobs = [i["path"] for i in tree if i["type"] == "blob"]
-    selected: list[str] = []
-
-    # Priority files first
+def pick_files(tree: list) -> list:
+    blobs    = [i["path"] for i in tree if i["type"] == "blob"]
+    selected = []
     for name in PRIORITY:
         for path in blobs:
             if path == name or path.endswith(f"/{name}"):
                 if path not in selected:
                     selected.append(path)
                 break
-
-    # Source files
     for path in blobs:
         if path in selected:
             continue
@@ -177,9 +168,7 @@ def pick_files(tree: list) -> list[str]:
             selected.append(path)
         if len(selected) >= 20:
             break
-
     return selected[:20]
-
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.route("/api/analyze", methods=["POST"])
@@ -202,19 +191,16 @@ def analyze():
     all_paths  = [i["path"] for i in tree if i["type"] == "blob"]
     file_paths = pick_files(tree)
 
-    # Fetch content
-    contents: dict[str, str] = {}
+    contents = {}
     for path in file_paths:
         text = fetch_file(owner, repo, path)
         if text:
             contents[path] = text[:3000] + ("\n... [truncated]" if len(text) > 3000 else "")
 
-    # Build context string
     ctx = f"Repository: {owner}/{repo}\n\n"
     for path, text in contents.items():
         ctx += f"\n=== {path} ===\n{text}\n"
 
-    # Prompt
     prompt = f"""<|system|>
 You are a senior software architect. Analyse the provided repository and respond ONLY with a single valid JSON object — no markdown, no explanation, no text outside the JSON.
 <|user|>
@@ -254,11 +240,11 @@ Rules:
     }
 
     try:
-        raw = "{" + call_watsonx(prompt, max_tokens=1400)
+        raw      = "{" + call_watsonx(prompt, max_tokens=1400)
         analysis = extract_json(raw)
     except Exception:
         try:
-            raw2 = call_watsonx(prompt.replace("<|assistant|>\n{", "<|assistant|>"), max_tokens=1400)
+            raw2     = call_watsonx(prompt.replace("<|assistant|>\n{", "<|assistant|>"), max_tokens=1400)
             analysis = extract_json(raw2)
         except Exception:
             analysis = fallback
@@ -282,7 +268,7 @@ def chat():
         return jsonify({"error": "question is required"}), 400
 
     prompt = f"""<|system|>
-You are RepoRamp, an expert code guide. You have analysed the repository below. Answer the developer's question concisely and specifically. Reference real file names when relevant. Do not make up code that isn't there.
+You are RepoRamp, an expert code guide. Answer the developer's question concisely. Reference real file names when relevant.
 <|user|>
 Repository context:
 {ctx[:5500]}
