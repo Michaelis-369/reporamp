@@ -11,19 +11,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
+
 CORS(app,
      origins="*",
      allow_headers=["Content-Type", "Authorization"],
      methods=["GET", "POST", "OPTIONS"],
      supports_credentials=False)
 
-GITHUB_TOKEN       = os.getenv("GITHUB_TOKEN", "")
-WATSONX_API_KEY    = os.getenv("WATSONX_API_KEY")
-WATSONX_PROJECT_ID = os.getenv("WATSONX_PROJECT_ID")
-WATSONX_URL        = os.getenv("WATSONX_URL", "https://us-south.ml.cloud.ibm.com")
-MODEL_ID           = "ibm/granite-3-8b-instruct"
-
-# ── CORS headers on every response ────────────────────────────────────────────
 @app.after_request
 def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"]  = "*"
@@ -40,10 +34,12 @@ def options_analyze():
 def options_chat():
     return "", 204
 
-@app.route("/health", methods=["GET", "OPTIONS"])
-def health():
-    return jsonify({"status": "ok"})
-    
+GITHUB_TOKEN       = os.getenv("GITHUB_TOKEN", "")
+WATSONX_API_KEY    = os.getenv("WATSONX_API_KEY")
+WATSONX_PROJECT_ID = os.getenv("WATSONX_PROJECT_ID")
+WATSONX_URL        = os.getenv("WATSONX_URL", "https://us-south.ml.cloud.ibm.com")
+MODEL_ID           = "ibm/granite-3-8b-instruct"
+
 # ── IAM token cache ───────────────────────────────────────────────────────────
 _iam_cache = {"token": None, "expires": 0}
 
@@ -152,14 +148,22 @@ def fetch_file(owner: str, repo: str, path: str):
     return None
 
 PRIORITY  = [
-    "README.md","README.txt","readme.md","package.json","requirements.txt",
-    "pyproject.toml","setup.py","go.mod","Cargo.toml","pom.xml",
-    "Dockerfile","docker-compose.yml","main.py","app.py","server.py",
-    "index.js","index.ts","main.js","main.ts","server.js","server.ts",
+    "README.md", "README.txt", "readme.md",
+    "package.json", "requirements.txt", "pyproject.toml",
+    "setup.py", "go.mod", "Cargo.toml", "pom.xml",
+    "Dockerfile", "docker-compose.yml",
+    "main.py", "app.py", "server.py",
+    "index.js", "index.ts", "main.js", "main.ts", "server.js", "server.ts",
 ]
-CODE_EXT  = {".py",".js",".ts",".jsx",".tsx",".go",".java",".rs",".rb",
-             ".php",".cs",".cpp",".c",".h",".swift"}
-SKIP_DIRS = {"node_modules",".git","dist","build","__pycache__","vendor",".next","coverage"}
+CODE_EXT  = {
+    ".py", ".js", ".ts", ".jsx", ".tsx",
+    ".go", ".java", ".rs", ".rb", ".php",
+    ".cs", ".cpp", ".c", ".h", ".swift",
+}
+SKIP_DIRS = {
+    "node_modules", ".git", "dist", "build",
+    "__pycache__", "vendor", ".next", "coverage",
+}
 
 def pick_files(tree: list) -> list:
     blobs    = [i["path"] for i in tree if i["type"] == "blob"]
@@ -255,7 +259,9 @@ Rules:
         analysis = extract_json(raw)
     except Exception:
         try:
-            raw2     = call_watsonx(prompt.replace("<|assistant|>\n{", "<|assistant|>"), max_tokens=1400)
+            raw2     = call_watsonx(
+                prompt.replace("<|assistant|>\n{", "<|assistant|>"), max_tokens=1400
+            )
             analysis = extract_json(raw2)
         except Exception:
             analysis = fallback
